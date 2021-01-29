@@ -20,9 +20,20 @@ This file also contains information about the number of annotators who rated eac
 
 We also include another version of this file, which does not contain the human relatedness judgments, but does have the BERT/ELMo norms (`data/processed/stims_with_nlm_distances.csv`). This can be used to run the `nlm_analysis.Rmd` file.
 
+Finally, we include the original stimuli file (`data/stims/stimuli.csv`).
+
+## Language modeling
+
+The file `src/modeling/get_distances.py` can be used to run each sentence pair through BERT and ELMo, and extract the cosine distance from the contextualized representations:
+
+```
+python src/modeling/get_distances.py
+```
+
+Note that this script requires the [`bert-embedding` package](https://pypi.org/project/bert-embedding/), as well as the [`allennlp` package](https://github.com/allenai/allennlp).
 
 ## Analysis scripts
 
 We include the analysis file for original stimuli, using BERT and ELMo (`data/src/analysis/nlm_analysis.html`). This can be rerun by "knitting" the .Rmd file (`data/src/analysis/nlm_analysis.Rmd`).  
 
-We also include the 
+We also include the analysis file for analyzing the individual trial data (`data/src/analysis/norming_analysis.html`). Note that this file also performs the analyses in Section 5.3 of the paper (the language model evaluations). The individual trial data is available upon request (sttrott@ucsd.edu). 

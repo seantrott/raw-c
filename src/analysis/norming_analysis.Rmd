@@ -1,0 +1,622 @@
+---
+title: "Analysis of homonymy/polysemy norming experiment"
+author: "Sean Trott and Benjamin Bergen"
+date: "August 24, 2020"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    # code_folding: hide
+  pdf_document: default
+  word_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE , dpi=300)
+```
+
+
+```{r include=FALSE}
+library(tidyverse)
+library(lme4)
+library(ggridges)
+library(broom.mixed)
+```
+
+
+# Introduction
+
+This document contains descriptive statistics and statistical analyses of data from a **norming study**.
+
+## Background
+
+We are interested in addressing several questions about ambiguity in the mental lexicon: 
+
+1) Does the **contextual distance** between two usages of a wordform impact the *ease* with which a comprehender transitions between those contexts?  
+2) Do word senses "exist" in the mental lexicon? That is, does the mental lexicon organize the vast array of **contexts** in which a wordform occurs into distinct *categories* (i.e., senses)?  
+3) Does the mental lexicon organize *polysemous* and *homonymous* meanings differently?  
+
+To this end, we adapted a set of stimuli from previous studies, which will ultimately be used in a primed sensibility judgment task. The central question is whether the **ease of transitioning** between two usages of a wordform are impacted, and how, by each of the relevant theoretical variables:
+
+1. The `cosine distance` between the contextualized representations of that wordform (as measured/obtained by BERT and ELMo).  
+2. Whether the two usages cross a `sense boundary` (as determined by Merriam-Webster/OED).  
+3. For different-sense usages, whether the relationship is one of `homonymy` or `polysemy` (again, as determined by Merriam-Webster/OED).
+
+## Description
+
+Stimuli were adapted from previous work. Each "item" (or word) was used in four possible sentences, corresponding to two distinct **senses**. The grammatical category of the word was always the same across sentences, even if it had a different meaning (i.e., always a Noun, or always a Verb). 
+
+Thus, there are six possible *pairwise comparisons* for each word.
+
+For example, the word "lamb" might be used in the following sentences:
+
+```
+1a. They liked the marinated lamb. 
+1b. They liked the grilled lamb.	
+2a. They liked the cute lamb.	
+2b. They liked the friendly lamb.
+```
+
+The first two correspond to the **food** sense of "lamb", and the second two correspond to the **animal** sense. Of course, these two senses are clearly related. For other wordforms, the senses are less similar, or even entirely unrelated, as is the case for `Homonymy`:
+
+```
+1a. It was a windy port.	
+1b. It was a seaside port.	
+2a. It was a delicious port.	
+2b. It was a sweet port.
+```
+
+As noted above, `Same/Different Sense` was determined by consulting Merriam-Webster and the OED. There were several cases in which it was difficult to tell whether two usages were in fact different senses (e.g., *glossy magazine* and *weekly magazine*); these were marked `Unsure` under `Ambiguity Type`. They were included in this norming study, but will ultimately be excluded from future experiments (as well as the publicly available normed relatedness judgments).
+
+We also hand-annotated the `Ambiguity Type` for each of the `Different Sense` usages. If two usages corresponded to different *entries*, the relation was listed as `Homonymy`; if two usages were different *sub-entries* or "senses" under the same entry, the relation was listed as `Polysemy`. We did not annotate for more fine-grained polysemous relations (e.g., `Metaphor` vs. `Metonymy`), but future work could benefit from a more granular analysis.
+
+## Purpose of norming study
+
+Before running our primary task, we sought to **norm** each of these items. This would serve several purposes:
+
+1. **An overall validation of our manipulation**: if `relatedness` judgments do not vary as a function of `same/different sense` (or of `Ambiguity Type`), it suggests the central manipulation is not successful.
+2. **Identifying potentially problematic stimuli**: e.g., if specific words consistently elicit lower-than-average ratings for `same sense` usages, that suggests those stimuli should be removed or modified. 
+3. **Assessing the "Unsure" items**. 
+4. **Developing a resource/metric for contextualized language models**: while there are a number of similarity judgment datasets (e.g., SimLex), to our knowledge there are none that compare the similarity of the *same wordform* in two different contexts. This would be useful for assessing the ability of contextualized language models (like BERT) to capture context-specific, human judgments about relatedness.
+
+## Description of norming study
+
+We recruited *81* subjects total from the SONA undergraduate pool at UC San Diego. Each participant saw a series of sentence pairs with the target word **bolded**, and were asked to determine how *related* the usage of that target word was across sentences. They were given five labeled options, ranging from "totally unrelated" to "same meaning". 
+
+There were 1380 possible sentence pairs: 115 words, 4 versions each, 12 possible comparisons (accounting for order). Each subject saw only 115 critical trials---1 comparison per word (i.e., no subject saw multiple comparisons with the same word). The comparisons any given subject saw for a given word were randomized (i.e., randomly sampled from the 12 possible comparisons), and the order of each item was also randomized.
+
+Finally, we included several comprehension checks to ensure attentiveness. First, we included bot checks at the beginning of the study; participants had to answer questions like "Which of the following is not a place to swim" (the correct answer is "Chair"). We also included two "catch" trials in the body of the main study. In one case, the word "house" was used in exactly the same sentence, meaning that the correct answer would be "same meaning"; in the other, the word "rose" was used in a completely different *grammatical context* ("red rose" vs. "rose from the chair"), meaning that the correct answer should be "totally unrelated". 
+
+
+# Load data
+
+First, we load the processed norming data; responses from individual subjects have already been collapsed into a single `.csv` file.
+
+```{r}
+### Set working directory (comment this out to run)
+# setwd("/Users/seantrott/Dropbox/UCSD/Research/Ambiguity/SSD/raw-c/src/analysis")
+
+### Load preprocessed data
+df_normed = read_csv("../../data/processed/polysemy_norming.csv")
+
+
+### Filter to critical trials
+df_normed_critical = df_normed %>%
+  filter(same %in% c(TRUE, FALSE)) %>%
+  filter(version_with_order != "catch")
+
+length(unique(df_normed_critical$subject))
+length(unique(df_normed_critical$word))
+nrow(df_normed_critical)
+table(df_normed_critical$same, df_normed_critical$ambiguity_type_oed)
+
+
+### Recode version information to omit order, so it can be merged with distance information
+df_normed_critical$version = fct_recode(
+  df_normed_critical$version_with_order,
+  M1_a_M1_b = "M1_b_M1_a",
+  M1_b_M2_a = "M2_a_M1_b",
+  M1_a_M2_a = "M2_a_M1_a",
+  M1_a_M2_b = "M2_b_M1_a",
+  M1_b_M2_b = "M2_b_M1_b",
+  M2_a_M2_b = "M2_b_M2_a"
+)
+```
+
+# Preprocessing
+
+## Bot checks
+
+We then identify and remove subjects who failed either of the bot checks.
+
+```{r}
+df_ppt_bots = df_normed %>%
+  filter(type == "bot_check") %>%
+  mutate(b1_correct = B1 == 2,
+         b2_correct = B2 == "Chair")
+
+df_bot_summ = df_ppt_bots %>%
+  group_by(subject) %>%
+  summarise(bot_avg = (b1_correct + b2_correct) / 2)
+df_bot_summ
+
+## Now remove ppts from critical stims that have < 100% avearge
+df_normed_critical = df_normed_critical %>%
+  left_join(df_bot_summ, by = "subject") %>%
+  filter(bot_avg == 1)
+length(unique(df_normed_critical$subject))
+```
+
+
+## Analyze catch trials
+
+We also remove subjects who did not receive at least 50% on the catch trials.
+
+```{r}
+### "Rose" should be "totally unrelated", and "blue" should be "same meaning"
+
+df_catch = df_normed %>%
+  filter(same %in% c(TRUE, FALSE)) %>%
+  filter(version_with_order == "catch") %>%
+  mutate(correct_answer = case_when(
+    word == "rose" ~ 0,  ## Strict (totally unrelated)
+    word == "house" ~ 4  ## Strict (same meaning)
+  )) %>%
+  mutate(correct_response = relatedness == correct_answer)
+
+
+### 
+df_ppts_catch = df_catch %>%
+  group_by(subject) %>%
+  summarise(catch_avg = mean(correct_response))
+df_ppts_catch
+## Now remove ppts from critical stims that have < 100% avearge
+df_normed_critical = df_normed_critical %>%
+  left_join(df_ppts_catch, by = "subject") %>%
+  filter(catch_avg >= .5) # remove people who got less than 50% on the catch
+length(unique(df_normed_critical$subject))
+```
+
+
+## Demographics statistics
+
+Here, we report general demographic statistics about the participants:
+
+```{r}
+df_demo = df_normed_critical %>%
+  group_by(subject, Gender, Mobile_Device, Native_Speaker) %>%
+  summarise(age = mean(Age))
+table(df_demo$Mobile_Device) 
+table(df_demo$Gender) 
+table(df_demo$Native_Speaker) 
+mean(df_demo$age)
+sd(df_demo$age)
+median(df_demo$age)
+range(df_demo$age)
+```
+
+
+# Primary analyses
+
+## Load modeling data
+
+Here, we merge the results from the neural language model analyses and merge it with our norming data. 
+
+```{r}
+df_distances = read_csv("../../data/processed/stims_with_nlm_distances.csv")
+nrow(df_distances)
+
+df_merged = df_normed_critical %>%
+  left_join(df_distances, by = c("word", "version", "string", "overlap",
+                                 "source", "same", "Class", "ambiguity_type"))
+
+nrow(df_merged)
+length(unique(df_merged$subject))
+```
+
+
+## H1: Do people judge same sense usages to be more related than different-sense usages?
+
+As predicted, we find that pairs belonging to the `same` sense are judged to be more `related` than pairs belonging to `different` senses. We control for `cosine distance` (from both models) in this analysis.
+
+```{r}
+
+df_merged %>%
+  group_by(same) %>%
+  summarise(mean_relatedness = mean(relatedness),
+            median_relatedness = median(relatedness),
+            sd_relatedness = sd(relatedness))
+
+model_same = lmer(data = df_merged,
+                  relatedness ~ same + 
+                    distance_bert + distance_elmo +
+                    Class +
+                    (1 + same + ambiguity_type | subject) +
+                    (1 + same | word),
+                  control=lmerControl(optimizer="bobyqa"),
+                  REML = FALSE)
+
+model_null = lmer(data = df_merged,
+                  relatedness ~ 
+                    distance_bert + distance_elmo +
+                    Class +
+                    (1 + same + ambiguity_type | subject) +
+                    (1 + same | word),
+                  control=lmerControl(optimizer="bobyqa"),
+                  REML = FALSE)
+
+
+anova(model_same, model_null)
+summary(model_same)
+
+
+
+df_merged %>%
+  ggplot(aes(x = relatedness)) +
+  geom_histogram(bins = 5) +
+  theme_minimal() +
+  facet_wrap(~same)
+
+df_merged %>%
+  ggplot(aes(x = relatedness)) +
+  geom_histogram(bins = 5,
+                 aes(y = (..density..))) +
+  theme_minimal() +
+  facet_wrap(~same)
+
+
+df_merged %>%
+  ggplot(aes(x = relatedness,
+             color = same)) +
+  geom_freqpoly(bins = 5) +
+  # scale_x_continuous(limits = c(0, 4)) +
+  theme_minimal()
+
+df_merged %>%
+  ggplot(aes(x = relatedness,
+             color = same)) +
+  geom_freqpoly(bins = 5,
+                aes(y = (..density..))) +
+  # scale_x_continuous(limits = c(0, 4)) +
+  theme_minimal()
+
+```
+
+### Discussion
+
+We find that indeed, `same sense` usages are judged as more `related` than `different sense` usages. In fact, `Same Sense` explains variance in `relatedness` even when `cosine distance` is adjusted for.
+
+
+## H2: Does relatedness differ as a function of ambiguity type?
+
+Here, we want to know whether pairs categorized as homonymous as seen as less related, on average, than words categorized as polysemous.
+
+Of course, if there is an effect of `ambiguity_type`, we expect it to show up primarily for `different sense` words. This could be modeled in one of two ways:
+
+- Using only `different sense words`, we can ask whether there's a main effect of `ambiguity_type`.  
+- Using **all data**, we could ask whether there's a significant interaction between `ambiguity_type` and `same sense`.  
+
+We adopt the latter approach here.
+
+If `ambiguity_type` matters, it should matter primarily for `different sense` usages. That is, the effect of `ambiguity_type` should change as a function of whether a given comparison involves `different` or `same` sense usages of a word. 
+
+Note that since `ambiguity_type` is only manipulated *across* words, this analysis complements **Analysis 1** above, which considers only `different sense` words. It's conceivable that one could observe a main effect of `ambiguity_type` for `different sense` words if the stimuli chosen to be homonyms are less related *overall* (including `same sense` usages). Thus, this analysis asks whether `ambiguity_type` has a different relationship with `relatedness` as a function of `same sense` vs. `different sense`. 
+
+```{r}
+df_merged %>%
+  group_by(same, ambiguity_type) %>%
+  summarise(mean_relatedness = mean(relatedness),
+            median_relatedness = median(relatedness),
+            sd_relatedness = sd(relatedness))
+
+model_interaction = lmer(data = df_merged,
+                  relatedness ~ same * ambiguity_type + 
+                    distance_bert + distance_elmo + 
+                    Class +
+                    (1 + same + ambiguity_type | subject) +
+                    (1 + same | word),
+                  control=lmerControl(optimizer="bobyqa"),
+                  REML = FALSE)
+
+model_both = lmer(data = df_merged,
+                  relatedness ~ same + ambiguity_type +
+                    distance_bert + distance_elmo + 
+                    Class +
+                    (1 + same+ ambiguity_type | subject) +
+                    (1 + same | word),
+                  control=lmerControl(optimizer="bobyqa"),
+                  REML = FALSE)
+
+
+summary(model_interaction)
+anova(model_interaction, model_both)
+
+df_tidy = broom.mixed::tidy(model_interaction)
+
+df_tidy %>%
+  filter(effect == "fixed") %>%
+  ggplot(aes(x = term,
+             y = estimate)) +
+  geom_point() +
+  coord_flip() +
+  geom_hline(yintercept = 0, linetype = "dotted") +
+  geom_errorbar(aes(ymin = estimate - 2*std.error, 
+                    ymax = estimate + 2*std.error), 
+                width=.2,
+                position=position_dodge(.9)) +
+  labs(x = "Predictor",
+       y = "Estimate") +
+  theme_minimal()
+
+```
+
+## H3: Do ELMo/BERT explain independent variance?
+
+```{r}
+model_no_bert = lmer(data = df_merged,
+                  relatedness ~ same * ambiguity_type + 
+                    distance_elmo + 
+                    Class +
+                    (1 + same + ambiguity_type | subject) +
+                    (1 + same | word),
+                  control=lmerControl(optimizer="bobyqa"),
+                  REML = FALSE)
+
+anova(model_interaction, model_no_bert)
+
+model_no_elmo = lmer(data = df_merged,
+                  relatedness ~ same * ambiguity_type + 
+                    distance_bert + 
+                    Class +
+                    (1 + same + ambiguity_type | subject) +
+                    (1 + same | word),
+                  control=lmerControl(optimizer="bobyqa"),
+                  REML = FALSE)
+
+anova(model_interaction, model_no_elmo)
+  
+```
+
+
+### Discussion
+
+It appears that `Ambiguity Type` explains variance in `relatedness` above and beyond that already explained by `cosine distance` and `same sense`. In particular, `different sense` homonyms appear to be judged as less related, on average, than `different sense` polysems (which span a wider range).
+
+These visualizations also suggest that the different-sense `Unsure` items behave more like `same sense` items from the `homonymy/polysemy` stimuli. For this reason, we exclude them from future analyses (and from the relatedness dataset).
+
+```{r}
+nrow(df_merged)
+df_merged = df_merged %>%
+  filter(ambiguity_type != "Unsure")
+nrow(df_merged)
+
+
+df_merged %>%
+  ggplot(aes(x = relatedness)) +
+  geom_histogram(bins = 5) +
+  theme_minimal() +
+  facet_wrap(~same + ambiguity_type)
+
+df_merged %>%
+  ggplot(aes(x = relatedness)) +
+  geom_histogram(bins = 5,
+                 aes(y = ..density..)) +
+  theme_minimal() +
+  facet_wrap(~same + ambiguity_type,
+             ncol = 2)
+
+df_merged %>%
+  ggplot(aes(x = relatedness,
+             color = same)) +
+  geom_freqpoly(bins = 5) +
+  theme_minimal() +
+  facet_wrap(~ambiguity_type, ncol = 1)
+
+
+df_merged %>%
+  ggplot(aes(x = relatedness,
+             color = same)) +
+  geom_freqpoly(bins = 5, 
+                 aes(y = ..density..)) +
+  theme_minimal() +
+  facet_wrap(~ambiguity_type, ncol = 1)
+```
+
+
+
+# Additional visualizations: residuals from NLMs
+
+Here, we visualize the residuals of a model with `cosine distance` information from both BERT and ELMo, and ask how those residuals relate to `ambiguity_type` and `same sense`. This helps illustrate the variance that these NLMs do *not* explain, which is still nonetheless correlated with Homonymy/Polysemy and Same/Different Sense.
+
+In particular, this visualization suggests:
+
+- `cosine distance` from BERT/ELMo systematically underestimates how **similar** participants find `same sense` items to be.  
+- for `homonyms`, `cosine distance` from BERT/ELMo systematically underestimates how **different** participants find `different sense` items to be.
+
+
+```{r}
+
+model_both_nlms = lmer(data = df_merged, 
+                  relatedness ~ distance_elmo + distance_bert +
+                    Class +
+                    (1| subject) +
+                    (1 | word),
+                  control=lmerControl(optimizer="bobyqa"),
+                  REML = FALSE)
+
+df_merged$resid_nlm = residuals(model_both_nlms)
+
+df_merged %>%
+  ggplot(aes(x = resid_nlm,
+             y = ambiguity_type,
+             fill = same)) +
+  geom_density_ridges2(aes(height = ..density..), 
+                       color=gray(0.25), 
+                       alpha = 0.5, 
+                       scale=0.85, 
+                       size=.9, 
+                       stat="density") +
+  labs(x = "Residuals (rel ~ ELMo + BERT)",
+       y = "Ambiguity type") +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  theme_minimal()
+
+```
+
+
+# Creating and evaluating relatedness dataset
+
+Finally, we create the contextualized word relatedness dataset.
+
+## Get average and SD relatedness for each pair (including version)
+
+First, we collect the *mean* nad *median* relatedness judgment for each **sentence pair**.
+
+
+```{r}
+df_norms_final = df_merged %>%
+  group_by(word, same, ambiguity_type, version, Class) %>%
+  summarise(mean_relatedness = mean(relatedness),
+            median_relatedness = median(relatedness),
+            diff = abs(mean_relatedness - median_relatedness),
+            count = n(),
+            sd_relatedness = sd(relatedness),
+            distance_bert = mean(distance_bert),
+            distance_elmo = mean(distance_elmo),
+            se_relatedness = sd_relatedness / sqrt(n()))
+summary(df_norms_final$count)
+nrow(df_norms_final)
+
+table(df_norms_final$ambiguity_type)
+
+
+```
+
+After removing the "Unsure" items, there are `r nrow(df_norms_final)` sentence pairs total. The minimum number of observations for any given pair is `r min(df_norms_final$count)`, and the median number of observations is `r median(df_norms_final$count)`.
+
+We can get a sense for how the items distribute by creating a density plot:
+
+```{r}
+df_norms_final %>%
+  ggplot(aes(x = mean_relatedness,
+             y = ambiguity_type,
+             fill = same)) +
+  geom_density_ridges2(aes(height = ..density..), 
+                       color=gray(0.25), 
+                       alpha = 0.5, 
+                       scale=0.85, 
+                       size=.9, 
+                       stat="density") +
+  labs(x = "Mean relatedness judgment",
+       y = "Ambiguity type") +
+  theme_minimal() +
+  theme(axis.title = element_text(size=rel(2)),
+        axis.text = element_text(size = rel(2)),
+        legend.text = element_text(size = rel(2)),
+        legend.title = element_text(size = rel(2)))
+
+ggsave("../../Figures/mean_norms.pdf", dpi = 300)
+```
+
+ 
+We then save these norms to disk.
+
+```{r}
+write.csv(df_norms_final, "../../data/processed/item_means.csv")
+```
+
+## Evaluating against BERT and ELMo
+
+Finally, we ask how well each of the `cosine distance` measures correlate with the `mean relatedness` judgments. In each case, we compute both *Pearson's r* and *Spearman's rho*.
+
+### BERT
+
+```{r}
+cor.test(df_norms_final$distance_bert,
+         df_norms_final$mean_relatedness,
+         method = "spearman")
+```
+
+### ELMo
+
+
+```{r}
+cor.test(df_norms_final$distance_elmo,
+         df_norms_final$mean_relatedness,
+         method = "spearman")
+```
+
+
+### Residual variance
+
+
+```{r}
+model_nlm = lm(data = df_norms_final,
+               mean_relatedness ~ distance_elmo + distance_bert)
+
+summary(model_nlm)$r.squared
+
+df_norms_final$resid = residuals(model_nlm)
+
+
+df_norms_final %>%
+  ggplot(aes(x = resid,
+             y = ambiguity_type,
+             fill = same)) +
+  geom_density_ridges2(aes(height = ..density..), 
+                       color=gray(0.25), 
+                       alpha = 0.5, 
+                       scale=0.85, 
+                       size=.9, 
+                       stat="density") +
+  labs(x = "Residuals (relatedness ~ ELMo + BERT)",
+       y = "Ambiguity type") +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  theme_minimal() +
+  theme(axis.title = element_text(size=rel(2)),
+        axis.text = element_text(size = rel(2)),
+        legend.text = element_text(size = rel(2)),
+        legend.title = element_text(size = rel(2)))
+
+ggsave("../../Figures/residuals.pdf", dpi = 300)
+
+
+df_norms_final %>%
+  ggplot(aes(x = resid)) +
+  geom_histogram(bins = 15,
+                 aes(y = ..density..),
+                 alpha = .5) +
+  geom_density() +
+  labs(x = "Residuals (relatedness ~ ELMo + BERT)") +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  theme_minimal() +
+  facet_wrap(~ambiguity_type + same) +
+  theme(axis.title = element_text(size=rel(2)),
+        axis.text = element_text(size = rel(2)),
+        legend.text = element_text(size = rel(2)),
+        legend.title = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)))
+
+ggsave("../../Figures/residuals_hist.pdf", dpi = 300)
+
+model_categories = lm(data = df_norms_final,
+               mean_relatedness ~ same * ambiguity_type)
+
+summary(model_categories)$r.squared
+
+model_all = lm(data = df_norms_final,
+               mean_relatedness ~ same * ambiguity_type + distance_bert + distance_elmo)
+
+summary(model_all)$r.squared
+
+```
+
+
+# Conclusion
+
+Overall, this norming study indicates that each of the variables of interest explain variance in `relatedness` judgments. 
+
+This is interesting from a theoretical perspective, as it suggests that the cognitive resources or semantic representations that participants call forth to *make* relatedness judgments involve each of these constructs: the **contextual distance** between two usages, whether or not those usages cross a **sense boundary**, and the **type of ambiguity** at play. Of course, the task encouraged and even made reference to the latter two contrasts: participants could indicate whether the two usages were the "same meaning" or "totally unrelated". In future work, we will use these stimuli in a primed sensibility judgment task, and ask whether, and how, more implicit measures of processing (e.g., `Accuracy` and `RT`) are predicted by these variables.
+
+Hopefully, these final relatedness norms are also useful from an applied perspective. This dataset could be useful for more explicit identification of where neural language models fall short; for example, a regression model trained to predict `relatedness` from `cosine distance` does fairly well overall, but appears to *underestimate* how related participants judge `same sense` usages to be, and *overestimate* how related participants judge `different sense` usages to be (particularly for homonymous wordforms). Thus, while these models clearly track *some* differences in contexts of use that correspond to human conceptions of semantic relatedness, humans might further group these contexts of use into fuzzy categories, or **senses**, in a way that BERT/ELMo do not.

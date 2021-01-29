@@ -1,0 +1,215 @@
+---
+title: "Mapping Ambiguity in Vector-Space"
+author: "Sean Trott and Benjamin Bergen"
+date: "May 6, 2020"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+  pdf_document: default
+  word_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE , dpi=300)
+```
+
+
+```{r include=FALSE}
+library(tidyverse)
+library(forcats)
+library(lme4)
+library(corrplot)
+library(ggridges)
+```
+
+
+# Introduction
+
+Klepousniotou et al (2008) and Brown (2008) both showed that the ease of transitioning between two senses of a polysemous word depends on their **degree of overlap**. That is, there is less inhibition (greater facilitation) between *marinated lamb* and *baby lamb* than between *control panel* and *advisory panel*. They measured priming *within* a sense category as a comparison, e.g., between *marinated lamb* and *tender lamb*. Klepousniotou et al (2008) also analyzed an interaction with sense **dominance**, but I will not be analyzing that here. 
+
+In the current analyses, I adapted most of their stimuli to sentences, e.g., "He liked the marinated lamb" vs. "He liked the baby lamb". I also created new stimuli using homonyms from Klepousniotou & Baum (2007). 
+
+I then ran each sentence through ELMo and BERT and obtained contextualized embeddings for the target word, e.g., *lamb*. Finally, I computed the `cosine distance` between the two embeddings. This allows us to make several comparisons:
+
+First, is `cosine distance` consistently larger for usages occurring *across* senses? That is, is $cos(lamb_{marinated}, lamb_{baby}) > cos(lamb_{marinated}, lamb_{tender})$? If so, it suggests that the contextualized embeddings distinguish between contexts of use in such a way as to correlate with sense boundaries.
+
+Second: for usages occurring *across* senses (e.g., *baby/marinated lamb*), does `cosine distance` vary as a function of `ambiguity type` (e.g., `polysemy` vs. `homonymy`)? 
+
+Our data thus looks as follows: each observation represents a comparison (`cosine distance`) between two identical wordforms appearing in different contexts. 1/3 of these observations reflect **same sense** contexts; 2/3 reflect **different sense** contexts. Furthermore, `condition` reflects the degree of overlap between the different sense-contexts.
+
+Random factors include:
+
+- Each `word`  
+- The `model` 
+
+For `word`, we include by-factor random slopes for the effect of `same sense`.
+
+# Load data
+
+```{r}
+## setwd("/Users/seantrott/Dropbox/UCSD/Research/Ambiguity/SSD/raw-c/src/analysis")
+df_distances = read_csv("../../data/processed/stims_with_nlm_distances.csv")
+
+nrow(df_distances)
+
+```
+
+We leave out items for which it was unclear whether the different versions were truly different senses. **TODO**: Discuss with Ben about this approach.
+
+```{r}
+df_distances = df_distances %>%
+  filter(ambiguity_type != "Unsure")
+nrow(df_distances)
+length(unique(df_distances$word))
+
+table(df_distances$same)
+table(df_distances$same) / nrow(df_distances)
+
+table(df_distances$ambiguity_type) / 6
+table(df_distances$ambiguity_type, df_distances$Class) / 6
+```
+
+
+
+
+# Primary analyses
+
+
+## Comparing BERT and ELMo distances
+
+```{r}
+df_distances %>%
+  ggplot(aes(x = distance_elmo,
+             y = distance_bert,
+             color = same)) +
+  geom_point(alpha = .5) +
+  theme_minimal() +
+  geom_smooth(method = "lm") +
+  facet_grid(~ambiguity_type)
+
+cor.test(df_distances$distance_bert,
+         df_distances$distance_elmo,
+         method = 'spearman')
+
+```
+
+
+## Is cosine distance larger for usages across senses?
+
+First, we ask whether the existence of a sense boundary explains significant variance in the `cosine distance` between two words.
+
+In this analysis, we add a random effect for the `model` being used to assess cosine distance.
+
+```{r}
+
+df_distances_reshaped = df_distances %>%
+  mutate(elmo = distance_elmo,
+         bert = distance_bert) %>%
+  pivot_longer(c(elmo, bert), names_to = "model",
+               values_to = "distance")
+
+model_same = lmer(data = df_distances_reshaped,
+                  distance ~ same + 
+                    Class + 
+                    (1 | model) +
+                    (1 + same | word),
+                  control=lmerControl(optimizer="bobyqa"),
+                  REML=FALSE)
+
+model_reduced = lmer(data = df_distances_reshaped,
+                  distance ~
+                    Class + 
+                    (1 | model) +
+                    (1 + same | word),
+                  control=lmerControl(optimizer="bobyqa"),
+                  REML=FALSE)
+
+summary(model_same)
+anova(model_same, model_reduced)
+```
+
+We find that it does. We can illustrate this visually as well:
+
+```{r}
+
+df_distances_reshaped %>%
+  ggplot(aes(x = distance,
+             fill = same,
+             y = model)) +
+  geom_density_ridges2(alpha = .6) +
+  theme_minimal() +
+  labs(x = "Cosine Distance",
+       y = "Model") +
+  facet_wrap(~ambiguity_type)+
+  theme(axis.title = element_text(size=rel(2)),
+        axis.text = element_text(size = rel(2)),
+        legend.text = element_text(size = rel(2)),
+        legend.title = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)))
+
+ggsave("../../Figures/cosine_distances.pdf", dpi = 300)
+```
+
+
+## Does cosine distance vary as a function of the type of ambiguity?
+
+Above, we saw that the cosine distance between two usages varied as a function of whether those usages belonged to the same sense.
+
+We also show that a model with both `condition` and `same` does not explain more variance than a model with only `same`; we don't really expect it to, given that `same sense` pairs are included here.
+
+```{r}
+model_both = lmer(data = df_distances_reshaped,
+                  distance ~ same + 
+                    Class + 
+                    ambiguity_type +
+                    (1 | model) +
+                    (1 + same | word),
+                  control=lmerControl(optimizer="bobyqa"),
+                  REML=FALSE)
+
+anova(model_both, model_same)
+```
+
+But there is also no significant interaction between `condition` and `same` (though it is marginal / trending)
+
+```{r}
+model_interaction = lmer(data = df_distances_reshaped,
+                     distance ~ ambiguity_type * same + 
+                       Class +
+                    (1 | model) +
+                    (1 + same | word),
+                     control=lmerControl(optimizer="bobyqa"),
+                     REML=FALSE)
+
+
+anova(model_both, model_interaction)
+summary(model_interaction)
+```
+
+
+We can also compare the model's predictions against the real values for cosine distance. 
+
+```{r}
+df_distances_reshaped$predictions = predict(model_interaction)
+
+df_distances_reshaped %>%
+  ggplot(aes(x = predictions,
+             y = distance,
+             color = same,
+             shape = ambiguity_type)) +
+  geom_point(alpha = .4) +
+  facet_grid(~model) +
+  theme_minimal()
+```
+
+
+# Conclusion
+
+Both BERT and ELMo appear to capture whether two **usages** of a wordform correspond to `same` or `different` senses (as determined by Merriam-Webster/OED): `Cosine Distance` is larger for `different sense` than `same sense` usages.
+
+The relationship between `Cosine Distance` and `Ambiguity Type` (i.e., `Homonymy/Polysemy`) is less clear, however: while the interaction `Ambiguity Type * Same Sense` is trending, it does not appear that `Cosine Distance` is *reliably* larger for different sense `homonyms` than different sense `polysems`.
+
+In future work, we will compare each measure---`Cosine Distance`, as well as `Same Sense` and `Ambiguity Type`---to human judgments of `relatedness`. Ultimately, each measure will be used to predict human behavior (`Accuracy` and `RT`) on a primed sensibility judgment task.
+
