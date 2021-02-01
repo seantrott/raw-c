@@ -67,18 +67,9 @@ The first two correspond to the **food** sense of "lamb", and the second two cor
 2b. It was a sweet port.
 ```
 
-As noted above, `Same/Different Sense` was determined by consulting Merriam-Webster and the OED. There were several cases in which it was difficult to tell whether two usages were in fact different senses (e.g., *glossy magazine* and *weekly magazine*); these were marked `Unsure` under `Ambiguity Type`. They were included in this norming study, but will ultimately be excluded from future experiments (as well as the publicly available normed relatedness judgments).
+As noted above, `Same/Different Sense` was determined by consulting Merriam-Webster and the OED. There were several cases in which it was difficult to tell whether two usages were in fact different senses (e.g., *glossy magazine* and *weekly magazine*); these were marked `Unsure` under `Ambiguity Type`. These will ultimately be excluded from these analyses and from future experiments (as well as the publicly available normed relatedness judgments).
 
 We also hand-annotated the `Ambiguity Type` for each of the `Different Sense` usages. If two usages corresponded to different *entries*, the relation was listed as `Homonymy`; if two usages were different *sub-entries* or "senses" under the same entry, the relation was listed as `Polysemy`. We did not annotate for more fine-grained polysemous relations (e.g., `Metaphor` vs. `Metonymy`), but future work could benefit from a more granular analysis.
-
-## Purpose of norming study
-
-Before running our primary task, we sought to **norm** each of these items. This would serve several purposes:
-
-1. **An overall validation of our manipulation**: if `relatedness` judgments do not vary as a function of `same/different sense` (or of `Ambiguity Type`), it suggests the central manipulation is not successful.
-2. **Identifying potentially problematic stimuli**: e.g., if specific words consistently elicit lower-than-average ratings for `same sense` usages, that suggests those stimuli should be removed or modified. 
-3. **Assessing the "Unsure" items**. 
-4. **Developing a resource/metric for contextualized language models**: while there are a number of similarity judgment datasets (e.g., SimLex), to our knowledge there are none that compare the similarity of the *same wordform* in two different contexts. This would be useful for assessing the ability of contextualized language models (like BERT) to capture context-specific, human judgments about relatedness.
 
 ## Description of norming study
 
@@ -197,6 +188,7 @@ range(df_demo$age)
 ```
 
 
+
 # Primary analyses
 
 ## Load modeling data
@@ -213,7 +205,76 @@ df_merged = df_normed_critical %>%
 
 nrow(df_merged)
 length(unique(df_merged$subject))
+
+df_merged = df_merged %>%
+  filter(ambiguity_type != "Unsure")
+nrow(df_merged)
 ```
+
+
+## Inter-annotator agreement
+
+
+```{r}
+# Suppress summarise info
+options(dplyr.summarise.inform = FALSE)
+
+df_by_ppt = df_merged %>%
+  select(word, same, ambiguity_type, relatedness, subject, version) %>%
+  pivot_wider(id_cols = c(word, same, ambiguity_type, version),
+              names_from = subject,
+              values_from = relatedness)
+
+## Compare to: df_norms_final
+
+ppts = unique(df_merged$subject)
+df_r = data.frame()
+
+for (p1 in ppts) {
+  
+  # Recalculate norms without subject
+  df_norms_without_subject = df_merged %>%
+    filter(subject != p1) %>%
+    group_by(word, same, ambiguity_type, version, Class) %>%
+    summarise(mean_relatedness = mean(relatedness),
+              median_relatedness = median(relatedness),
+              diff = abs(mean_relatedness - median_relatedness),
+              count = n(),
+              sd_relatedness = sd(relatedness),
+              distance_bert = mean(distance_bert),
+              distance_elmo = mean(distance_elmo),
+              se_relatedness = sd_relatedness / sqrt(n()))
+  
+  df_joined = df_merged %>%
+    select(word, same, ambiguity_type, relatedness, subject, version) %>%
+    filter(subject == p1) %>%
+    left_join(df_norms_without_subject, by = c("word", "same", "ambiguity_type", "version"))
+  
+  test = cor.test(df_joined$relatedness,
+                  df_joined$mean_relatedness,
+                 method = "spearman")
+  df_test = broom::tidy(test)
+  df_test$p1 = p1
+  df_r = rbind(df_r, df_test)
+}
+
+df_r %>%
+  ggplot(aes(x = estimate)) +
+  geom_histogram(alpha = .7) +
+  geom_vline(xintercept = mean(df_r$estimate, na.rm= TRUE),
+             linetype = "dotted") +
+  geom_vline(xintercept = .58,
+             linetype = "dashed") +
+  scale_x_continuous(limits = c(0, 1)) +
+  theme_minimal()
+
+mean(df_r$estimate, na.rm = TRUE)
+median(df_r$estimate, na.rm = TRUE)
+sd(df_r$estimate, na.rm = TRUE)
+range(df_r$estimate)
+
+```
+
 
 
 ## H1: Do people judge same sense usages to be more related than different-sense usages?
@@ -383,15 +444,7 @@ anova(model_interaction, model_no_elmo)
 
 It appears that `Ambiguity Type` explains variance in `relatedness` above and beyond that already explained by `cosine distance` and `same sense`. In particular, `different sense` homonyms appear to be judged as less related, on average, than `different sense` polysems (which span a wider range).
 
-These visualizations also suggest that the different-sense `Unsure` items behave more like `same sense` items from the `homonymy/polysemy` stimuli. For this reason, we exclude them from future analyses (and from the relatedness dataset).
-
 ```{r}
-nrow(df_merged)
-df_merged = df_merged %>%
-  filter(ambiguity_type != "Unsure")
-nrow(df_merged)
-
-
 df_merged %>%
   ggplot(aes(x = relatedness)) +
   geom_histogram(bins = 5) +
@@ -493,7 +546,7 @@ table(df_norms_final$ambiguity_type)
 
 ```
 
-After removing the "Unsure" items, there are `r nrow(df_norms_final)` sentence pairs total. The minimum number of observations for any given pair is `r min(df_norms_final$count)`, and the median number of observations is `r median(df_norms_final$count)`.
+The minimum number of observations for any given pair is `r min(df_norms_final$count)`, and the median number of observations is `r median(df_norms_final$count)`.
 
 We can get a sense for how the items distribute by creating a density plot:
 
@@ -523,7 +576,7 @@ ggsave("../../Figures/mean_norms.pdf", dpi = 300)
 We then save these norms to disk.
 
 ```{r}
-write.csv(df_norms_final, "../../data/processed/item_means.csv")
+write.csv(df_norms_final, "../../data/stims/item_means.csv")
 ```
 
 ## Evaluating against BERT and ELMo
@@ -611,7 +664,6 @@ model_all = lm(data = df_norms_final,
 summary(model_all)$r.squared
 
 ```
-
 
 # Conclusion
 

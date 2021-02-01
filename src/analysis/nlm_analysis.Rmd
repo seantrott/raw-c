@@ -1,6 +1,5 @@
 ---
 title: "Mapping Ambiguity in Vector-Space"
-author: "Sean Trott and Benjamin Bergen"
 date: "May 6, 2020"
 output:
   html_document:
@@ -49,7 +48,6 @@ For `word`, we include by-factor random slopes for the effect of `same sense`.
 # Load data
 
 ```{r}
-## setwd("/Users/seantrott/Dropbox/UCSD/Research/Ambiguity/SSD/raw-c/src/analysis")
 df_distances = read_csv("../../data/processed/stims_with_nlm_distances.csv")
 
 nrow(df_distances)
