@@ -199,14 +199,14 @@ Here, we merge the results from the neural language model analyses and merge it 
 df_distances = read_csv("../../data/processed/stims_with_nlm_distances.csv")
 nrow(df_distances)
 
-df_merged = df_normed_critical %>%
+df_merged_all = df_normed_critical %>%
   left_join(df_distances, by = c("word", "version", "string", "overlap",
                                  "source", "same", "Class", "ambiguity_type"))
 
-nrow(df_merged)
-length(unique(df_merged$subject))
+nrow(df_merged_all)
+length(unique(df_merged_all$subject))
 
-df_merged = df_merged %>%
+df_merged = df_merged_all %>%
   filter(ambiguity_type != "Unsure")
 nrow(df_merged)
 ```
@@ -663,6 +663,63 @@ model_all = lm(data = df_norms_final,
 
 summary(model_all)$r.squared
 
+```
+
+# Supplementary: Classifying 'unsure' items
+
+For several items, it was unclear in the dictionaries whether the `different` sense usages were actually different senses. We excluded these from the final RAW-C dataset, but here, we ask whether one can use `mean relatedness` to classify allegedly `different sense` usages as same vs. different senses.
+
+```{r}
+table(df_merged_all$ambiguity_type)
+
+df_norms_final_all = df_merged_all %>%
+  group_by(word, same, ambiguity_type, version, Class) %>%
+  summarise(mean_relatedness = mean(relatedness),
+            count = n(),
+            sd_relatedness = sd(relatedness),
+            distance_bert = mean(distance_bert))
+table(df_norms_final_all$ambiguity_type)
+nrow(df_norms_final_all)
+```
+
+
+We can classify `Unsure`, `different sense` pairs using logistic regression, with the input being either `cosine distance` or `mean relatedness`.
+
+```{r}
+# All items for which we *are* sure
+df_norms_final_all_no_unsure = df_norms_final_all %>%
+  filter(ambiguity_type != "Unsure")
+```
+
+Here, we train using relatedness judgments.
+
+```{r}
+# Train model using relatedness
+model_relatedness = glm(data = df_norms_final_all_no_unsure,
+                     same ~ mean_relatedness,
+                     family = binomial())
+
+df_norms_final_all$relatedness_prob= predict(model_relatedness, df_norms_final_all, type = "response")
+df_norms_final_all = df_norms_final_all %>%
+  mutate(relatedness_prediction = ifelse(relatedness_prob > .5, TRUE, FALSE)) %>%
+  mutate(relatedness_correct = relatedness_prediction == same)
+
+df_norms_final_all %>%
+  ggplot(aes(x = relatedness_prob)) +
+  geom_histogram(bins = 15,
+                 aes(y = ..density..),
+                 alpha = .5) +
+  facet_wrap(~same + ambiguity_type)
+
+df_norms_final_all %>%
+  group_by(ambiguity_type, same) %>%
+  summarise(accuracy = mean(relatedness_correct),
+            prop_same = mean(relatedness_prediction),
+            count = n())
+
+df_no_unsure = df_norms_final_all %>%
+  filter(ambiguity_type != "Unsure")
+mean(df_no_unsure$relatedness_correct)
 ```
 
 # Conclusion

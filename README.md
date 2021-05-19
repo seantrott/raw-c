@@ -6,7 +6,7 @@ GitHub page for the RAW-C dataset: Relatedness of Ambiguous Words, in Context.
 
 There are several data files.
 
-Most relevant is [`data/stims/raw-c.csv`](https://github.com/seantrott/raw-c/blob/main/data/processed/raw-c.csv): the complete set of sentence pairs in the final RAW-C dataset. The most important columns (for most purposes) are:
+Most relevant is [`data/processed/raw-c.csv`](https://github.com/seantrott/raw-c/blob/main/data/processed/raw-c.csv): the complete set of sentence pairs in the final RAW-C dataset. The most important columns (for most purposes) are:
 
 - `word` 
 - `sentence1` and `sentence2`: the sentence pair being contrasted  
@@ -20,7 +20,7 @@ This file also contains information about the number of annotators who rated eac
 
 We also include another version of this file, which does not contain the human relatedness judgments, but does have the BERT/ELMo norms (`data/processed/stims_with_nlm_distances.csv`). This can be used to run the `nlm_analysis.Rmd` file.
 
-Finally, we include the original stimuli file (`data/stims/stimuli.csv`).
+Finally, we include the original stimuli file (`data/processed/stimuli.csv`).
 
 ## Language modeling
 
