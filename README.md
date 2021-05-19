@@ -4,7 +4,7 @@ GitHub page for the RAW-C dataset: Relatedness of Ambiguous Words, in Context.
 
 To cite:
 
-> Trott, S., Bergen, B. (2021). RAW-C: Relatedness of Ambiguous Words--in Context (A New Lexical Resource for English). Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing (ACL-IJCNLP 2021).
+> Trott, S., Bergen, B. (2021). RAW-C: Relatedness of Ambiguous Words––in Context (A New Lexical Resource for English). Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing (ACL-IJCNLP 2021).
 
 ## Data
 
