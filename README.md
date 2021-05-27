@@ -24,6 +24,13 @@ This file also contains information about the number of annotators who rated eac
 
 We also include another version of this file, which does not contain the human relatedness judgments, but does have the BERT/ELMo norms (`data/processed/stims_with_nlm_distances.csv`). This can be used to run the `nlm_analysis.Rmd` file.
 
+We also include [`data/processed/raw-c_with_dominance.csv`](https://github.com/seantrott/raw-c/blob/main/data/processed/raw-c_with_dominance.csv), which contains all of the same columns as **RAW-C**, with several additions:
+
+- `dominance_sentence2`: mean dominance of `sentence2` relative to `sentence1`.  
+- `sd_dominance_sentence2`: standard deviation for dominance judgments of `sentence2` relative to `sentence1`. 
+
+Note that dominance judgments are only included for **different sense** sentence pairs. 
+
 Finally, we include the original stimuli file (`data/processed/stimuli.csv`).
 
 ## Language modeling
