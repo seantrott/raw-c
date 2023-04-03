@@ -579,6 +579,69 @@ We then save these norms to disk.
 write.csv(df_norms_final, "../../data/stims/item_means.csv")
 ```
 
+
+```{r}
+df_norms_final = read_csv("../../data/stims/item_means.csv")
+df_norms_final = df_norms_final %>%
+  mutate(Same = case_when(
+    same == TRUE ~ "Same Sense",
+    same == FALSE ~ "Different Sense"
+  ))
+
+df_norms_final %>%
+  ggplot(aes(x = mean_relatedness,
+             fill = Same,
+             ..scaled..)) +
+  geom_density(alpha = .7,
+               size = 1.2) +
+  labs(x = "Mean relatedness judgment",
+       y = "Density",
+       fill = "Same Sense") +
+  theme_minimal() +
+  theme(axis.title = element_text(size=rel(2)),
+        axis.text = element_text(size = rel(2)),
+        legend.text = element_text(size = rel(2)),
+        legend.title = element_text(size = rel(2)))
+
+ggsave("../../Figures/norms_no_homonymys.pdf", dpi = 300)
+
+
+df_norms_final %>%
+  ggplot(aes(x = mean_relatedness)) +
+  geom_histogram(alpha = .7,
+                 bins = 15) +
+  labs(x = "Mean relatedness judgment",
+       y = "Count",
+       fill = "Same Sense") +
+  theme_bw() +
+  facet_wrap(~Same) +
+  theme(axis.title = element_text(size=rel(2)),
+        axis.text = element_text(size = rel(2)),
+        legend.text = element_text(size = rel(2)),
+        legend.title = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2)))
+
+ggsave("../../Figures/norms_no_homonymys_hist.pdf", dpi = 300)
+
+df_norms_final %>%
+  ggplot(aes(x = distance_bert,
+             fill = Same,
+             ..scaled..)) +
+  geom_density(alpha = .7,
+               size = 1.2) +
+  labs(x = "Cosine Distance (BERT)",
+       y = "Count",
+       fill = "Same Sense") +
+  theme_minimal() +
+  theme(axis.title = element_text(size=rel(2)),
+        axis.text = element_text(size = rel(2)),
+        legend.text = element_text(size = rel(2)),
+        legend.title = element_text(size = rel(2)))
+
+ggsave("../../Figures/distances_no_homonyms_dens.pdf", dpi = 300)
+```
+
+
 ## Evaluating against BERT and ELMo
 
 Finally, we ask how well each of the `cosine distance` measures correlate with the `mean relatedness` judgments. In each case, we compute both *Pearson's r* and *Spearman's rho*.
@@ -653,6 +716,25 @@ df_norms_final %>%
 
 ggsave("../../Figures/residuals_hist.pdf", dpi = 300)
 
+
+df_norms_final %>%
+  ggplot(aes(x = resid,
+             fill = Same,
+             ..scaled..)) +
+  geom_density(alpha = .7,
+               size = 1.2) +
+  labs(x = "Residuals (relatedness ~ BERT)",
+       y = "Density",
+       fill = "Same Sense") +
+  geom_vline(xintercept = 0, size = 1.2, linetype = "dotted") +
+  theme_minimal() +
+  theme(axis.title = element_text(size=rel(2)),
+        axis.text = element_text(size = rel(2)),
+        legend.text = element_text(size = rel(2)),
+        legend.title = element_text(size = rel(2)))
+
+ggsave("../../Figures/resids_no_homonyms.pdf", dpi = 300)
+
 model_categories = lm(data = df_norms_final,
                mean_relatedness ~ same * ambiguity_type)
 
@@ -662,6 +744,26 @@ model_all = lm(data = df_norms_final,
                mean_relatedness ~ same * ambiguity_type + distance_bert + distance_elmo)
 
 summary(model_all)$r.squared
+
+df_norms_final %>%
+  ggplot(aes(x = resid)) +
+  geom_histogram(alpha = .7,
+                 bins = 15) +
+  labs(x = "Residuals (relatedness ~ ELMo + BERT)",
+       y = "Count") +
+  theme_bw() +
+  # scale_x_continuous(limits = c(0, 1),
+  #                    breaks = c(0, .5, 1)) +
+  facet_wrap(~Same) +
+  geom_vline(xintercept = 0, size = 1.2, linetype = "dotted") +
+  theme(axis.title = element_text(size=rel(2)),
+        axis.text = element_text(size = rel(2)),
+        legend.text = element_text(size = rel(2)),
+        legend.title = element_text(size = rel(2)),
+        strip.text.x = element_text(size = rel(2))) +
+  theme(panel.spacing = unit(1.5, "lines"))
+
+ggsave("../../Figures/resids_no_homonyms_hist.pdf", dpi = 300)
 
 ```
 
