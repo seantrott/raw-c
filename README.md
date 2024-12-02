@@ -19,6 +19,7 @@ Most relevant is [`data/processed/raw-c.csv`](https://github.com/seantrott/raw-c
 - `mean_relatedness`: the mean relatedness judgment across human participants  
 - `distance_bert`: the cosine distance between BERT's representation of the target word  
 - `distance_elmo`: the cosine distance between ELMo's representation of the target word  
+- `string`: the actual target word that occurs in the sentence (e.g., "break" vs. "broke").
 
 This file also contains information about the number of annotators who rated each sentence pair (`count`), as well as the variance across those judgments (`sd_relatedness`). 
 
@@ -41,7 +42,7 @@ The file `src/modeling/get_distances.py` can be used to run each sentence pair t
 python src/modeling/get_distances.py
 ```
 
-Note that this script requires the [`bert-embedding` package](https://pypi.org/project/bert-embedding/), as well as the [`allennlp` package](https://github.com/allenai/allennlp).
+**Note (12/2/2024)**: This script requires the [`bert-embedding` package](https://pypi.org/project/bert-embedding/), as well as the [`allennlp` package](https://github.com/allenai/allennlp). Because the HuggingFace `transformers` package is more widely used, I am working to update this script with the option to run it with `transformers`.
 
 ## Analysis scripts
 
