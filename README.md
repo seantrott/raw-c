@@ -32,8 +32,6 @@ We also include [`data/processed/raw-c_with_dominance.csv`](https://github.com/s
 
 Note that dominance judgments are only included for **different sense** sentence pairs. 
 
-Finally, we include the original stimuli file (`data/processed/stimuli.csv`).
-
 ## Language modeling
 
 The file `src/modeling/get_distances.py` can be used to run each sentence pair through BERT and ELMo, and extract the cosine distance from the contextualized representations:
